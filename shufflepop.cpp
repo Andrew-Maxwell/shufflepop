@@ -170,12 +170,12 @@ struct Board {
     }
 };
 
-struct Message {
+struct Level {
     string text;
     Bag bag;
     Row examples;
 
-    Message(string newText, Bag newBag, Tile a = Tile(GONE), Tile b = Tile(GONE), Tile c = Tile(GONE), Tile d = Tile(GONE), Tile e = Tile(GONE)) :
+    Level(string newText, Bag newBag, Tile a = Tile(GONE), Tile b = Tile(GONE), Tile c = Tile(GONE), Tile d = Tile(GONE), Tile e = Tile(GONE)) :
         text(newText), bag(newBag) {
             examples[0] = a;
             examples[1] = b;
@@ -194,14 +194,14 @@ struct MainData {
     float power = 1;
     float score;
     Tile last = Tile(STAR, BLACK);
-    int screen = 0, currentLevel = 1;
+    int screen = 0, currentLevel = 1, startLevel = 1;
     int tickCounter = 0;
     bool play = false;
 
-    Message messages[6] = {
-        Message("S H U F F L E       P O P\n\nTap or click to continue...",
+    Level levels[6] = {
+        Level("S H U F F L E       P O P\n\nTap or click to continue...",
                 Bag(0, 0, 0, 0, 1)),
-        Message("Tap or click to select\n"
+        Level("Tap or click to select\n"
                 "cards as they go past the\n"
                 "circle at the bottom of\n"
                 "the screen. Match them by\n"
@@ -211,25 +211,25 @@ struct MainData {
                 "Tap or click to continue...",
                 Bag(1, 0, 0, 0, 0),
                 Tile(SUITES[0], COLORS[0]), Tile(SUITES[1], COLORS[1]), Tile(SUITES[2], COLORS[2]), Tile(SUITES[3], COLORS[3]), Tile(SUITES[0], COLORS[2])),
-        Message("Star cards can match with\n"
+        Level("Star cards can match with\n"
                 "any other card.\n"
                 "Tap or click to continue...",
                 Bag(6, 1, 0, 0, 0),
                 Tile(GONE), Tile(GONE), Tile(STAR, BLACK)),
-        Message("Movement cards will allow\n"
+        Level("Movement cards will allow\n"
                 "you to move between rows\n"
                 "and select cards in\n"
                 "different rows.\n"
                 "Tap or click to continue...",
                 Bag(10, 1, 3, 0, 0),
                 Tile(GONE), Tile(MOVES[0]), Tile(GONE), Tile(MOVES[1])),
-        Message("Speed cards increase the\n"
+        Level("Speed cards increase the\n"
                 "speed, and are worth 50\n"
                 "points.\n"
                 "Tap or click to continue...",
-                Bag(32, 3, 12, 1, 0),
+                Bag(32, 3, 12, 3, 0),
                 Tile(GONE), Tile(GONE), Tile(SPEED)),
-        Message("Die cards will shuffle\n"
+        Level("Die cards will shuffle\n"
                 "some number of cards above\n"
                 "them.\n"
                 "You completed the tutorial.\n"
@@ -251,10 +251,12 @@ struct MainData {
     }
 
     void init() {
-        bag = messages[currentLevel].bag;
+        bag = levels[currentLevel].bag;
+        startLevel = currentLevel;
         fillBoard();
         x = COLS / 2;
         y = 0;
+        score = 0;
         speed = 0.015;
         power = 1;
         screen = 0;
@@ -270,21 +272,26 @@ struct MainData {
         if (!play) {
             Rectangle window = {SPACE, GRIDY + SPACE, SCREENWIDTH - 2 * SPACE, SCREENHEIGHT - GRIDY - 2 * SPACE};
             DrawRectangleRounded(window, 0.04, 5, WHITE);
-            Message& message = messages[screen];
+            Level& level = levels[screen];
             for (int i = 0; i < COLS; i++) {
-                message.examples[i].draw(i, 0);
+                level.examples[i].draw(i, 0);
             }
-            DrawTextEx(font, message.text.c_str(), {2 * SPACE, GRIDY + 2 * SPACE}, FONTSIZE / 3.2, 0, BLACK);
+            DrawTextEx(font, level.text.c_str(), {2 * SPACE, GRIDY + 2 * SPACE}, FONTSIZE / 3.2, 0, BLACK);
             if (screen == 0 && score != 0) {
                 DrawTextEx(font, ("\n\n\nPrevious Score: " + to_string(int(score))).c_str(), {2 * SPACE, GRIDY + 2 * SPACE}, FONTSIZE / 3, 0, BLACK);
             }
             if (tap()) {
-                score = 0;
-                if (screen == 0 && currentLevel < 5) {
-                    screen = currentLevel;
+                if (screen == 0) {
+                    init();
+                    if (currentLevel < 5) {
+                        screen = currentLevel;
+                    }
+                    else {
+                        play = true;
+                    }
                 }
                 else {
-                    init();
+                    bag = levels[currentLevel].bag;
                     play = true;
                 }
             }
@@ -331,11 +338,10 @@ struct MainData {
                 }
             }
             power -= (speed / 50.0f);
-            if (score > 150 && currentLevel < 5) {
+            if (score > (currentLevel - startLevel + 1) * 150 && currentLevel < 5) {
                 currentLevel++;
                 screen = currentLevel;
                 play = false;
-                score = 0;
             }
             if (power < 0) {
                 screen = 0;
