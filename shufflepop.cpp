@@ -20,6 +20,7 @@
 #define HEALTHBARWIDTH 20
 #define SCREENWIDTH (COLS * GRIDX + SPACE + HEALTHBARWIDTH)
 #define SCREENHEIGHT (ROWS * GRIDY + SPACE)
+#define CAMERASPEED 0.06
 
 #define GREEN {0x28, 0x96, 0x5A, 0xFF}
 #define RED {0xDA, 0x3E, 0x52, 0xFF}
@@ -30,7 +31,7 @@
 
 #define BASESCORE 10
 #define POWERSCORE 5
-#define ACCELERATION 0.00055
+#define ACCELERATION 0.0008
 #define SPEEDBOOST 0.003
 #define SPEEDSCORE 50
 
@@ -73,7 +74,7 @@ struct Tile {
 
     Tile(int newDisplay, Color newColor = WHITE) : display(newDisplay), color(newColor) {}
 
-    void draw(int x, float y, bool selected = false, bool last = false) {
+    void draw(float x, float y, bool selected = false, bool last = false) {
         if (!isGone()) {
             Rectangle rec = {GRIDX * x + SPACE, GRIDY * y + SPACE, TILEX, TILEY};
             if (last) {
@@ -188,6 +189,7 @@ struct Level {
 struct MainData {
     Board board;
     Bag bag = Bag(32, 3, 12, 1, 4);
+    float camera;
     int x = COLS / 2;
     float y = 0;
     float speed = 0.015;
@@ -209,7 +211,7 @@ struct MainData {
                 "Get 150 points to continue\n"
                 "to the next tutorial level.\n"
                 "Tap or click to continue...",
-                Bag(1, 0, 0, 0, 0),
+                Bag(1, 0, 1, 0, 0),
                 Tile(SUITES[0], COLORS[0]), Tile(SUITES[1], COLORS[1]), Tile(SUITES[2], COLORS[2]), Tile(SUITES[3], COLORS[3]), Tile(SUITES[0], COLORS[2])),
         Level("Star cards can match with\n"
                 "any other card.\n"
@@ -255,6 +257,7 @@ struct MainData {
         startLevel = currentLevel;
         fillBoard();
         x = COLS / 2;
+        camera = 0;
         y = 0;
         score = 0;
         speed = 0.015;
@@ -301,9 +304,15 @@ struct MainData {
                 fillRow(y - 2);
             }
             y -= speed;
+            if (camera < x - COLS / 2) {
+                camera = min(camera + CAMERASPEED, double(x - COLS / 2));
+            }
+            if (camera > x - COLS / 2) {
+                camera = max(camera - CAMERASPEED, double(x - COLS / 2));
+            }
             for (int i = 0; i < ROWS; i++) {
-                for (int j = 0; j < COLS; j++) {
-                    board[floor(y) + i][j].draw(j, i + floor(y) - y, (j == mod(x, COLS) && i == ROWS - 2));
+                for (int j = camera - 1; j < camera + COLS; j++) {
+                    board[floor(y) + i][j % COLS].draw(j - camera, i + floor(y) - y, (j == mod(x, COLS) && i == ROWS - 2));
                 }
             }
             if (tap()) {
@@ -313,7 +322,7 @@ struct MainData {
                 if (popped.isSuite()) {
                     if (popped.match(last)) {
                         score += BASESCORE + POWERSCORE * power;
-                        speed += ACCELERATION * power;
+                        speed += ACCELERATION * power * power;
                         power += (1 - power) / 10.0f;
                     }
                     else {
@@ -332,7 +341,7 @@ struct MainData {
                     score += SPEEDSCORE;
                 }
                 else if (popped.isDie()) {
-                    for (int i = 0; i < popped.display - DIE + 2; i++) {
+                    for (int i = 1; i < popped.display - DIE + 2; i++) {
                         board[rowSelect - i][x] = bag.grab();
                     }
                 }
@@ -347,12 +356,13 @@ struct MainData {
                 screen = 0;
                 play = false;
             }
-            last.draw(mod(x, COLS), ROWS - 2.5, false, true);
+            last.draw(x - camera, ROWS - 2.5, false, true);
+            DrawRectangle(COLS * GRIDX + SPACE, 0, 20, 10000, WHITE);
             if (power > 0.25 || tickCounter / 15 % 2 == 0) {
-                DrawRectangle(COLS * GRIDX + SPACE, (1 - power) * (ROWS - 1) * GRIDY, 20, 10000, BLACK);
+                DrawRectangle(COLS * GRIDX + SPACE + 5, (1 - power) * (ROWS - 1) * GRIDY + 5, 10, 10000, BLACK);
             }
             else {
-                DrawRectangle(COLS * GRIDX + SPACE, (1 - power) * (ROWS - 1) * GRIDY, 20, 10000, RED);
+                DrawRectangle(COLS * GRIDX + SPACE + 5, (1 - power) * (ROWS - 1) * GRIDY + 5, 10, 10000, RED);
             }
             DrawRectangle(0, (ROWS - 1) * GRIDY + SPACE, COLS * GRIDX + 20 + SPACE, FONTSIZE + SPACE, WHITE);
             DrawTextEx(font, to_string(int(score)).c_str(), {0, (ROWS - 1) * GRIDY + SPACE}, FONTSIZE, 0, BLACK);
@@ -366,12 +376,16 @@ void doEverything() {
     everything.mainLoop();
 }
 
-int main() {
+int main(int argc, char** argv) {
     InitWindow(SCREENWIDTH, SCREENHEIGHT, "ShufflePop");
     SetTargetFPS(60);
     srand(time(NULL));
     EnableCursor();
     everything.init();
+
+    if (argc == 2) {
+        everything.currentLevel = 5;
+    }
 
     //Extra characters array (e.g. for dice, suites)
     int extraChars[] = {0x2680, 0x2681, 0x2682, 0x2683, 0x2684, 0x2685, 0x2660, 0x2663, 0x2665, 0x2666, 0x2217};
